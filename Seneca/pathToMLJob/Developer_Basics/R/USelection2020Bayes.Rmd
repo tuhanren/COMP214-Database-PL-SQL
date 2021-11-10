@@ -1,0 +1,716 @@
+---
+title: "2020 US Presidential Election Bayesian Model"
+author: "Guannan Shen"
+date: "`r format(Sys.time(), '%d %B %Y')`"
+output:
+  bookdown::pdf_document2:
+    citation_package: natbib
+bibliography: references.bib
+
+subtitle: Result based on popular vote calculated through multi-level regression with
+  post-stratification.
+thanks: 'Code and data are available at: [https://github.com/smwong88/US_2020_Election_Forecasting.git].'
+abstract: "| In the US 2020 election, polling the US electorate is a very important
+  method in which experts go about forecasting election results, especially in the
+  age of COVID-19 where traditional practices of large events are no longer common
+  practice for certain candidates. In this paper, we did a multi-level regression
+  with post-stratification in order to determine the probability of Biden winning
+  the popular vote over Trump, found through the use of BRMS that Biden had a 51%
+  probability. This of course is an exceedingly narrow result and rife with weaknesses-for
+  instance, the presidency is not decided by popular vote but rather who wins the
+  electoral college, and the data is based off a survey by the Democracy Fund Voter
+  Study Group in the week of June 25 to July 1st, suggesting perhaps the data is outdated
+  for the election on November 3, 2020. Next steps include accounting for the electoral
+  college, and perhaps using more predictors such as income or timely issues such
+  as views on the pandemic to determine voter intention. \n"
+toc: no
+---
+
+```{r setup, include=FALSE, message = FALSE, warnings = FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+#Adjust Scale of Graphs
+
+
+# Load necessary packages.
+library(scales)
+library(broom)
+library(haven)
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(magrittr)
+library(gridExtra)
+library(usmap)
+library(tidybayes)
+library(brms)
+```
+
+# Introduction
+
+In this paper, we use statistical software R [@citeR] to analyse the US 2020 Presidential Election.
+
+Polling has an exceedingly important role to play in the 2020 US election between the Republican candidate Donald Trump and the Democratic candidate Joe Biden. Given the unique circumstance in which 2020 finds itself—in the midst of a global pandemic in which the US is an epicenter, with nearly 15,000 cases reported daily as of the week of October 18 to 23 [@citeHipes]. This means that certain other metrics of voter enthusiasm, such as door-to-door campaigning and large-scale campaign events such as rallies, are no longer as indicative of a candidate’s popularity given the Biden campaign is practicing the idea of  “remote campaigning” virtually [@citeForgey]. However, there is a lot of speculation regarding the accuracy of polls, especially in the wake of the 2016 election in which Democratic candidate Hillary Clinton was projected to win the presidency over then-candidate Donald Trump with the percentage of her win considered from “70 to as high as 99%” [@citePew]. Clearly the level of support for Donald Trump had been underestimated by pollsters and pundits alike, suggesting more care has to be put into the integrity of polling to ensure there is no pre-assumed conclusion that will drive the statistical analysis. Indeed, our paper strived to do just that—it investigates Biden and Trump’s chances of winning the popular vote (an important caveat as the US election is determined by the electoral college) through the lens of the electoral population’s gender, race, education, age and state distributions. 
+
+This paper specifically makes use of data collected by the election polling done by the Democracy Fund Voter Study Group, for the week of June 25th to June 1st in order to create a logistical model which determines the probability that one would vote for Trump or Biden depending on their age, race, gender, state and education as explanatory variables. This model, created from a survey which does not perfectly align with the American electorate’s distribution of age, race, gender, state and education (and thus is a “non-probability sample”) is then re-weighted to data from the American Community Surveys published by IPSUM. Through multilevel logistic regression with post-stratification, the response variable being who one would vote for, this paper finds Joe Biden’s probability of winning the popular vote to be 51%, indicating that he would narrowly win. Regarding predictors, it was shown that men, people who hadn’t graduated high school, and the older population were more likely overall to vote for Trump over Biden, whereas each state had individual localized effects. For instance, Californian voters were clearly much more supportive of Biden than Arizona. In terms of race, Biden had a much more palpable lead in terms of winning African American/Black votes than his opponent. All these various effects from the logistical model culminated in the narrow victory mentioned earlier.
+
+The outline of the paper is as follows. In the Data section of this document, the paper discusses the nature of the survey and stratification data that we collected from the Democracy Fund Voter Study Group and IPSUM respectively. Such details include the strengths, weaknesses and natures of the datasets, the variables the paper makes use of, and the methodology of the data collection. Moreover, it briefly touches on the cleaning of the data that had to be done such that the two datasets could be referenced with relation to each other, such as the mapping of ‘sex’ in the survey data to ‘gender’ in the stratification data, but those intricacies are discussed further in the Discussions section. An analysis of the raw data (in terms of the variables age, gender, state, education and race) will be found here as well. In the Model section, the paper defines and explains the statistical methodology regarding how the logistic regression was structured, as well a justification for its appropriateness in the current context. In the Results section there will be a summary and graphical representations of our logistic regression, and these results will be further discussed in the Discussions section regarding what the conclusion of Biden’s narrow victory actually entails. This study of course has its fair share of weaknesses and thus next steps—it predicts the winner of the popular vote, not necessarily the electoral college. As it is completely possible for one to win the first but not the second, a next step would be to consider applying this stratification to a theoretical electoral college vote. Moreover, this survey data was conducted in June and the context of the election in particular has been the rapidly worse situation that the US has been in with the pandemic in recent weeks [@citeHipes]. Thus, perhaps a stronger analysis would consider the effect COVID-19 has on Trump’s election efforts given it appears to be a prominent election issue.
+
+```{r load_data, echo = FALSE, warning = FALSE,message = FALSE}
+survey_data <- read.csv("survey.csv")
+census_data <- read.csv("census.csv")
+```
+
+#Data
+
+
+##Survey Data
+
+The source of the survey data is the Democracy Fund Voter Study Group, which conducts weekly interviews of American voters from July of last year to December of this year [@citeSurvey]. The most recent data was from the week of July 25. This data originally had 6,479 observations from voters, but in order to construct a binary response for our response variable of the 2020 presidential vote, this paper omitted those who were not voting, were voting third party, or were unsure. As a result, there remained 5,200 observations in which we could determine whether our explanatory variables could determine one’s inclination to vote for one of the two major candidates.
+
+The population of this dataset is the electorate of the United States, but the frame in which this study is done are the online respondents from a market research platform. The sample consists of the 6,479 observations. These online respondents complete an “attention check” before doing the survey, which decreases the proclivity towards non-response as the respondents must prove they are paying attention, and then the survey data is weighted by the 2017 American Community Survey that is done by the United States Census Bureau [@citeSurvey]. The respondents are picked specifically based on their characteristics, so the sampling isn’t random but rather purposive, in order to meet a target that is vaguely representative of the United States population. This does mean that the error is arguably, according to @citeSurvey, greater than if the respondents were truly randomly picked. Regarding weighting, these “weights” artificially create more data through sampling within underrepresented subgroups, as well as through interaction between different variables. For the purpose of this analysis, the interactions of note are: gender by race, education by gender and race by education.
+
+As this dataset was processed through the software provided by @citeR, all instances of non-response for any of the explanatory variables or response variables were omitted. A weakness of this survey for the sake of our study and in general is that it is done so far in advance of the election that given the dynamic nature of US politics, one must wonder if these data would be truly helpful in being predictive of voting intention in 2020. Another is that in terms of “gender”, it appears there are only two options available, and for those outside the gender binary it means they are not properly represented within the survey. The weighting, if there is a non-representative pattern inside a small sub-group, may enhance the prominence of that pattern in an inappropriate way. That being said, a strength is that the survey itself removes 8% of responses because of too speedy responses or just picking the same option (ex. the first listed option) for all the questions, meaning the data is more clean and useful. Moreover, the size of the survey is large enough that there is specific data on specific subgroups of the population.
+
+Regarding variables, we picked state, age, education, race and gender as predictors for one’s vote in 2020. Gender, race and age according to the figures below play a notable role in voting patterns, which falls in line with the pre-existing literature on the topic.
+
+As you can see from Figure 1, from the raw data it appears that women want to vote for Joe Biden in greater numbers in a larger margin than Trump’s increase over votes from men. In Figure 2, according to percentages, 59% of women wish to vote for Joe Biden out of decided voters in our population, giving Biden an 18% increase amongst women versus Trump’s 10% increase in support amongst men. This validates the premise that one’s gender does correlate with their vote and deserves to be considered in our model. We must note, however, that this data does not include information regarding non-binary voters, which is mitigated somewhat by the low percentage of non-binary individuals in the American electorate.
+
+```{r voteg1, fig.cap="2020 Presidential Votes by Gender", echo = FALSE, message = FALSE, warning=FALSE, fig.width = 5, fig.height = 3}
+#Bar graph comparing gender of US electorate and presidential vote
+survey_data %>%
+  ggplot(aes(x = gender, fill = vote)) + 
+  geom_bar(position = "dodge") +
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Count", 
+       fill = "2020 Presidential Vote",
+       x = "Gender")
+```
+
+```{r voteg2, fig.cap="2020 Presidential Vote Distribution by Gender", message = FALSE, echo = FALSE, warning=FALSE, fig.height = 2, fig.width = 5}
+
+# Compare the percentage of men and women voting for either candidate
+
+plotdata <- survey_data %>%
+  group_by(gender, vote) %>%
+  summarize(n = n()) %>% 
+  mutate(pct = n/sum(n),
+         lbl = scales::percent(pct))
+
+ggplot(plotdata, 
+       aes(x = factor(gender),
+           y = pct,
+           fill = factor(vote))) + 
+    coord_flip() +
+  geom_bar(stat = "identity",
+           position = "fill") +
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = percent) +
+  geom_text(aes(label = lbl), 
+            size = 3, 
+            position = position_stack(vjust = 0.5)) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Percent", 
+       fill = "2020 Presidential Vote",
+       x = "Gender")+
+  theme_minimal()
+
+```
+
+Regarding race, according to Figure 3 we can see that a large percentage of the respondents in the sample are white and appear to support Trump by a wide margin to Biden. However, in contrast, the Black/African American vote goes overwhelmingly to Biden (shown in Figure 4 with an overwhelming 76% lead), whereas other racial categories are much more contested. It must be noted that in order to format this data for post-stratification with the ACS and ensure the subgroups that our eventual model would be enacted upon were big enough, several groups, such as Hawaiian, had to be conflated to the “other asian or pacific islander” category, justified as they were a small percentage of the population and their voting patterns tended to correlate. We nearly used whether a respondent was hispanic within the model, but in the end decided not to because the subcells were getting too small and we believed race in turn would suffice as a predictor regarding background.
+
+```{r voter1, fig.cap="2020 Presidential Votes by Race", echo = FALSE, message = FALSE, warning=FALSE, fig.height = 3, fig.width = 6}
+
+#Bar graph comparing race of US electorate and presidential vote
+survey_data %>%
+  ggplot(aes(x = race, fill = vote)) + 
+  geom_bar(position = "dodge") + 
+  coord_flip() +   
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Count", 
+       fill = "2020 Presidential Vote",
+       x = "Race")
+```
+
+```{r voter2, fig.cap="2020 Presidential Vote Distribution by Race", message = FALSE, echo = FALSE, warning=FALSE, fig.height = 4, fig.width = 7}
+
+#Compare the percentage of people of various races voting for either candidate.
+plotdata <- survey_data %>%
+  group_by(race, vote) %>%
+  summarize(n = n()) %>% 
+  mutate(pct = n/sum(n),
+         lbl = scales::percent(pct))
+
+ggplot(plotdata, 
+       aes(x = factor(race),
+           y = pct,
+           fill = factor(vote))) + 
+    coord_flip() +
+  geom_bar(stat = "identity",
+           position = "fill") +
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = percent) +
+  geom_text(aes(label = lbl), 
+            size = 3, 
+            position = position_stack(vjust = 0.5)) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Percent", 
+       fill = "2020 Presidential Vote",
+       x = "Race")+
+  theme_minimal()
+```
+
+For reasons due to ensuring that our subgroups remained large enough that there were a significant pool of samples for each, the education predictor was conflated to the categories: didn’t graduate high school (from “3rd Grade or less", "Middle School - Grades 4 - 8" and "Completed some high school"), graduated high school, didn’t graduate college, and graduated college (from “College Degree (such as B.A. or B.S.)”, “Master’s Degree”, “Doctorate Degree”, “Associate Degree”, “Completed some graduate, but no degree”). This is because the combined subgroups tended to follow similar voting patterns and because given the small sizes of some of the variables in terms of observations, they did not affect the overall data significantly.
+
+Figure 5 seems to demonstrate an overall trend that those who have graduated college tend to vote more for Biden than Trump, Figure 6 showing a 6.2% difference. That being said, the other categories appear highly competitive, so perhaps education is not as strong a predictor as certain other variables mentioned earlier.
+
+
+```{r votee1, fig.cap="2020 Presidential Votes by Education", echo = FALSE, message = FALSE, warning=FALSE, fig.height = 3, fig.width = 6}
+#Bar graph comparing education level of US electorate and presidential vote
+survey_data %>%
+  ggplot(aes(x = education, fill = vote)) + 
+  geom_bar(position = "dodge") + 
+  coord_flip() +   
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Count", 
+       fill = "2020 Presidential Vote",
+       x = "Education")
+```
+
+```{r votee2, fig.cap="2020 Presidential Vote Distribution by Education", message = FALSE, echo = FALSE, warning=FALSE, fig.height = 3, fig.width = 7}
+
+#Compare the percentage of people of different education levels voting for either candidate
+
+plotdata <- survey_data %>%
+  group_by(education, vote) %>%
+  summarize(n = n()) %>% 
+  mutate(pct = n/sum(n),
+         lbl = scales::percent(pct))
+
+ggplot(plotdata, 
+       aes(x = factor(education),
+           y = pct,
+           fill = factor(vote))) + 
+    coord_flip() +
+  geom_bar(stat = "identity",
+           position = "fill") +
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = percent) +
+  geom_text(aes(label = lbl), 
+            size = 3, 
+            position = position_stack(vjust = 0.5)) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Percent", 
+       fill = "2020 Presidential Vote",
+       x = "Education")+
+  theme_minimal()
+```
+
+```{r votea1, fig.cap="2020 Presidential Votes by Age", echo = FALSE, warning=FALSE, message = FALSE, fig.height = 3, fig.width = 6}
+#Bar graph comparing the age group of US electorate and presidential vote.
+survey_data %>%
+  ggplot(aes(x = age, fill = vote)) + 
+  geom_bar(position = "dodge") + 
+  coord_flip() +   
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Count", 
+       fill = "2020 Presidential Vote",
+       x = "Education")
+```
+
+According to Figure 7, it appears that Biden has a huge lead amongst young voters, and there is a direct correlation between the age group one belongs to and the likelihood that they’ll vote for a candidate. For instance, Biden’s lead is 36% amongst voters 18 to 29 in Figure 8, very tightly tied with Trump for the age group 30 to 44, and appears to be somewhat behind Trump with older voters. This suggests age is an appropriate variable to gauge whether someone would vote for a particular candidate or not.
+
+```{r votea2, fig.cap="2020 Presidential Vote Distribution by Age", message = FALSE,echo = FALSE, warning=FALSE , fig.height = 3, fig.width = 6}
+#Compare the percentage of different age groups voting for either candidate
+
+plotdata <- survey_data %>%
+  group_by(age, vote) %>%
+  summarize(n = n()) %>% 
+  mutate(pct = n/sum(n),
+         lbl = scales::percent(pct))
+
+ggplot(plotdata, 
+       aes(x = factor(age),
+           y = pct,
+           fill = factor(vote))) + 
+    coord_flip() +
+  geom_bar(stat = "identity",
+           position = "fill") +
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = percent) +
+  geom_text(aes(label = lbl), 
+            size = 3, 
+            position = position_stack(vjust = 0.5)) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Percent", 
+       fill = "2020 Presidential Vote",
+       x = "Education")+
+  theme_minimal()
+```
+
+America is divided into states, and the regional politics and situations within those states appears to play an important role, according to Figures 9 and 10, of which candidate that one would vote for. For instance, some states like California are 62% skewed towards Biden out of decided voters, while others like Arizona are 68% in favour of voting for Trump. Others like Wyoming are 50% split exactly, so this shows that one’s state has a hugely important influence/pressure on what candidate one is likely to vote for. 
+
+```{r votes1, fig.cap="2020 Presidential Votes by State", echo = FALSE,message = FALSE, warning=FALSE, , fig.height = 7, fig.width = 7}
+# Bar graph comparing state of US electorate and presidential vote.
+survey_data %>%
+  ggplot(aes(x = state, fill = vote)) + 
+  geom_bar(position = "dodge") + 
+  coord_flip() +   
+  theme_minimal() +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Count", 
+       fill = "2020 Presidential Vote",
+       x = "State")
+```
+
+
+```{r votes2, fig.cap="2020 Presidential Vote Distribution by State", message = FALSE,echo = FALSE, warning=FALSE, fig.height = 7, fig.width = 7}
+#COmpare the percentage of people from each state voting for either candidate.
+plotdata <- survey_data %>%
+  group_by(state, vote) %>%
+  summarize(n = n()) %>% 
+  mutate(pct = n/sum(n),
+         lbl = scales::percent(pct))
+
+ggplot(plotdata, 
+       aes(x = factor(state),
+           y = pct,
+           fill = factor(vote))) + 
+    coord_flip() +
+  geom_bar(stat = "identity",
+           position = "fill") +
+  scale_y_continuous(breaks = seq(0, 1, .2), 
+                     label = percent) +
+  geom_text(aes(label = lbl), 
+            size = 3, 
+            position = position_stack(vjust = 0.5)) +
+  scale_fill_brewer(palette = "Set2") +
+  labs(y = "Percent", 
+       fill = "2020 Presidential Vote",
+       x = "State")+
+  theme_minimal()
+```
+
+## Post-Stratification Data
+
+This data is offered by IPUMS, based on the American Community Surveys from the U.S. Census Bureau. In this project, we use the data collected from the American Community Survey 2018 [@citeIPUMS].
+
+The target population in this case is every resident in the United States (not necessarily every voter in the United States, something we kept in mind when we engaged in the process of data-cleaning through taking out underage respondents who cannot vote, for instance). The sampling population is all the living quarters in the United States (in which both housing units and group quarters, such as college residence halls, military barracks, faculties for the homeless, correctional facilities, group homes, nursing facilities and more, are considered “living quarters”), and thus the sampling frame is the list of living quarters that were picked out from the sampling population.
+
+There are two phases of determining the samples for housing units: in the first, new samples are selected (in September/October of the previous year), and in the second, non-responding addresses are selected for personal interviewing (in January of the current year). This removes the percentage of non-respondents. These samples are selected from the sampling population, found via the US Census Bureau’s “Master Address File”, which has a list of all living quarters and certain non-residential buildings [@citeACS].
+
+For group quarters, certain exclusions are applied for privacy and feasibility reasons (ex. domestic violence shelters, dangerous encampments and more). Field representatives do interviews of qualifying group quarters, in which people are organized into groups of 10 [@citeACS]. 
+
+For housing units, data collection is done through Internet, mail, telephone and personal visit. This includes emailing respondents or offering paper questionnaires for ease of accessibility. In the case of non-response, there is a follow-up with a computer-assisted telephone interview. This data collection is made further accessible with language assistance, such as translated resources and interviewers that can speak several languages through telephone contact [@citeACS].
+
+This methodology has several pros and cons—in terms of pros, a lot of care has been taken to lower the level of non-response. Not only through computer-assisted interviewing in order to follow up with those who do not respond, but this survey also takes into account group quarters for those who may not have access to a residential home. This ensures that the underprivileged are not overlooked in the survey. Because of the care taken to make sure those not proficient in English can access the survey, there will be greater representation of the less dominant culture given America is primarily an English-speaking country. The second stage, which involves contacting people once again who didn’t respond the first time, offers even more accuracy. However, this does not guarantee complete response in the least, and this data is accurate to 2018. The population distribution may have changed since then and the data could be outdated to the current demographics. Moreover, this dataset asks for the respondents’ sex rather than their gender, providing then ignoring the demographic of non-cisgender and gender non-conforming people in their methodology [@citeACS].
+
+As mentioned in the previous section, the variables at play are the state, the gender (taken from the sex and assumed to the same), age, race and education level of the respondant. Variables that were created for the sake of post-stratification are the number of cases under each combination of the five variables (so the size of the cell), and the proportion of each cell with regard to the total population [@citeACS].
+
+Like with the previous dataset for the survey, this one had to combine race into particular categories. In this one, observations such as “Two major races” had to be combined into “Other race, nec” as it was the most accurate category. Education was split into the same categories mentioned earlier, associate degrees and such all folded under college degree for the sake of simplicity.
+
+Below are some distributions of the variables of interest. 
+
+
+```{r education, echo=FALSE, message = FALSE,warning = FALSE , fig.height = 3, fig.width = 3.5, fig.cap = "Distribution of Education"}
+
+
+educate <- aggregate(x=census_data$Number, by = list(census_data$education), FUN = sum)
+
+# Aggregating the number of cases for each education level
+
+edunames <- educate$Group.1
+eduvalues <- educate$x
+
+# Separating labels of education level  and counts
+# Making a statistics table for education levels (table1)
+edustat <- data.frame(row.names = paste(edunames))
+edustat[,1] <- eduvalues
+edustat[,2] <- signif(eduvalues / sum(eduvalues), 4)
+colnames(edustat) <- c("Number of Cases", "Proportion")
+
+# Calculating proportions of each education level, and keeping 4 significant digits 
+
+edustat %>%
+  ggplot(aes(x = reorder(edunames, `Number of Cases`), y = `Number of Cases`)) + geom_bar(stat = 'identity')  +
+  labs(x="Education Levels") + theme(axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5), plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r age, echo=FALSE,message = FALSE, warning = FALSE, fig.height = 3, fig.width = 3.5, fig.cap = "Distribution of Age"}
+
+# Producing Figure 12
+agecate <- aggregate(x=census_data$Number, by = list(census_data$age), FUN = sum)
+
+agenames <- agecate$Group.1
+agevalues <- agecate$x
+# Separating labels of age groups  and counts
+
+# Making a statistics table for age groups (table2)
+
+agestat <- data.frame(row.names = paste(agenames))
+agestat[,1] <- agevalues
+agestat[,2] <- signif(agevalues / sum(agevalues), 4)
+colnames(agestat) <- c("Number of Cases", "Proportion")
+# Calculating proportions of each age group, and keeping 4 significant digits 
+agestat %>%
+  ggplot(aes(x = agenames, y = `Number of Cases`)) + geom_bar(stat = 'identity') + 
+  labs(x="Age Groups") + 
+  theme(plot.title = element_text(hjust = 0.5))
+#Saving figure 12(barplot), with x labels tilted at 45 degree and centering title
+
+```
+
+As we can identify in Figure 11, there are more people who have graduated from college than simply high school. Moreover, there are more people who didn't graduate from college than didn’t graduate high school. Thus, a sizable proportion of the US electorate is relatively educated. In Figure 12, people who are 60+ are by far the largest age group, showing an aging population. Given that this population tends to support Trump, this is an important statistic to keep an eye on.
+
+You can see from Table 1 that the total number of people who completed high school is 65.83% of the overall population, whereas the proportion of people who completed college is 38.75%. Based on Table 2, the people whose age are 60 and above has 35.4% of overall population, which is the largest portion in US.
+
+```{r state,message = FALSE, warning=FALSE, echo=FALSE, fig.height = 4, fig.width = 6, fig.cap = "Population for Each State"}
+
+# Producing Figure 13
+statecate <- aggregate(x=census_data$Number, by = list(census_data$state), FUN = sum)
+
+# Aggregating the number of cases for each state
+
+statenames <- statecate$Group.1
+statevalues <- statecate$x
+
+# Separating abbreviations of states  and counts
+
+statestat <- data.frame(row.names = paste(statenames))
+statestat[,1] <- statevalues
+colnames(statestat) <- c("Number of Cases")
+
+# Putting states abbreviations and counts into a data frame
+
+statestat %>%
+  ggplot(aes(x = reorder(statenames, `Number of Cases`), y = `Number of Cases`)) + geom_bar(stat = 'identity')  + 
+  theme(axis.text.x = element_text(angle = 90, hjust = 0.5, vjust = 0.5), plot.title = element_text(hjust = 0.5))  + 
+  labs(x="US States")
+
+caprop <- signif((statestat[5,]/sum(statestat$`Number of Cases`)) * 100, 4)
+#Calculating proportion of California, rounding to 4 significant digits
+txprop <- signif((statestat[44,]/sum(statestat$`Number of Cases`)) * 100, 4)
+#Calculating proportion of Texas, rounding to 4 significant digits
+map <- tibble(abbr = statenames, statevalues)
+#Making states abbs and counts into a tibble for next steps preparation
+fipus <- select(statepop, abbr, fips)
+#fips is a vector of codes for each state, and abbr is a vector of state abbreviations for matching
+#statepop is offered by package “usmap”
+map <- merge(map, fipus, by="abbr")
+#Merging two tibbles by abbreviations. This is for matching the fips for each state.
+#fips are needed for plotting us map in the next step.
+
+```
+
+```{r state1,message = FALSE, warning=FALSE, echo=FALSE, fig.height = 4, fig.width = 6, fig.cap = "States Population Map"}
+plot_usmap(data = map, values = "statevalues", color = "blue",  labels = TRUE) + 
+  scale_fill_continuous(
+    low = "white", high = "red", name = "Population (2018)", label = scales::comma
+  ) + theme(legend.position = "right", plot.title = element_text(hjust = 0.5)) 
+
+#Plotting the population for each state on a US map. With white on low population states, and red on #high population states. Dividing each state by blue lines
+#This function must have fips code for each state in the input dataset.
+
+```
+
+Figure 13 shows the distribution of population amongst US states. The largest by far is California (shown earlier to skew towards Biden), the second largest Texas (which tends to skew towards Trump). Figure 14 shows that the population is highest amongst coastal and southern states, and this may skew the popular vote from the electoral vote.
+
+```{r gender, message = FALSE,warning = FALSE, echo=FALSE, fig.height = 3, fig.width = 6,fig.cap = "Distribution of Gender"}
+
+# Producing Figure 15
+
+gencate <- aggregate(x=census_data$Number, by = list(census_data$gender), FUN = sum)
+
+# Aggregating the number of cases for each gender group
+
+gennames <- gencate$Group.1
+genvalues <- gencate$x
+
+# Separating labels of gender groups  and counts
+
+# Making a statistics table for gender groups (table3)
+
+genstat <- data.frame(row.names = paste(gennames))
+genstat[,1] <- genvalues
+genstat[,2] <- signif(genvalues / sum(genvalues), 4)
+
+# Calculating proportions of each gender group, and keeping 4 significant digits 
+colnames(genstat) <- c("Number of Cases", "Proportion")
+
+genstat %>%
+  ggplot(aes(x = gennames, y = `Number of Cases`)) + geom_bar(stat = 'identity') + labs(x="Gender Groups") + theme(plot.title = element_text(hjust = 0.5))
+
+```
+
+```{r race, message = FALSE,warning = FALSE, echo=FALSE, fig.height = 3, fig.width = 6, fig.cap = "Population for Races"}
+
+racecate <- aggregate(x=census_data$Number, by = list(census_data$race), FUN = sum)
+# Aggregating the number of cases for each race
+racenames <- racecate$Group.1
+racevalues <- racecate$x
+# Separating labels for each race group  and counts
+
+# Making a statistics table for race groups (table4)
+
+racestat <- data.frame(row.names = paste(racenames))
+racestat[,1] <- racevalues
+racestat[,2] <- signif(racevalues / sum(racevalues), 4)
+colnames(racestat) <- c("Number of Cases", "Proportion")
+# Calculating proportions of each race group, and keeping 4 significant digits 
+
+racestat %>%
+  ggplot(aes(x = reorder(racenames, `Number of Cases`), y = `Number of Cases`)) + geom_bar(stat = 'identity')  + 
+  theme(axis.text.x = element_text(angle = 45, hjust = 0.5, vjust = 0.5), plot.title = element_text(hjust = 0.5))  + 
+  labs(x="Race Groups")
+
+```
+
+
+
+Figure 15 has the distribution of gender, shown to be 51.56% for women and 48.44% for men.
+Figure 16 shows that much like the survey data from @citeSurvey, the largest race group in the US is white, and the second largest race group is Black/African American. Based on Table 4, the white population has 2,031,750 people, and 78.05% of the overall population. The Black/African American population has 249,642 people, and 9.59% of the overall population. This indicates they are important sectors of the population for the candidates to campaign for.
+
+
+#Modeling with MRP
+
+Different levels of the variables of interest in the post-stratification process show different responses for presidential votes (support for Joe Biden).  The survey’s demographics differ from the actual population, therefore certain groups of individuals were under/overrepresented in the survey, leading to sampling bias.  Therefore, we use the survey sample data to infer presidential votes on the census population in the US using post-stratification variables.
+In order to address the over/underrepresentation of certain demographics within the survey results, we perform multilevel regression and poststratification (MRP) on the survey data from the Democracy Fund Voter Study Group with census data from the ACS provided by IPUMS.  In doing so, we calculate the proportions of each group of individuals from the actual population distribution, the census data, and apply the results of the survey onto these proportions.  In doing so, we basically reweigh the results from the survey to post-stratify our results to produce an estimate of the 2020 US election that more accurately represents the actual population distribution.  This method is effective for using non-representative samples to make predictions, however can be quite troublesome when cells created of each group are too small, creating unstable results for each variable [@citeMJAlexander].  Throughout our cleaning process, we had to alter the way each group was levelled off in order to create cells that were large enough to produce stable results.  
+
+**Steps of MRP**
+
+1. Gather sample data(survey data) with certain key variables in mind (state, age, gender, education, race).
+2. Gather population data(census data) with the same key variables.
+3. Match the variables of each dataset so each of the cells will correspond with each other, if necessary.
+4. Decide the quantity you would like to measure in the sample (support for Joe Biden = 1, support for Donald Trump = 0).
+5. Estimate quantity of interest in the population using MRP to predict using the key demographics from the sample.
+6. Apply this model to the new data (census data) and make estimates of predictions for the population. 
+
+Our first approach in modelling predictions was to look at linear regression on the *dummy_vote* variable and the five explanatory variables selected using the function *lm()*.  We chose to use a frequentist approach, where parameters of interest are fixed, first to explore both datasets. There are assumptions made about the data when choosing to perform ordinary linear regression on the survey data .
+1. The relationship between all explanatory variables and the response variable follows a linear pattern.
+2. The variance of the residuals is constant for all values/levels of the explanatory variables.
+3.  Observations are independent of each other.
+4. All variables are normally distributed. 
+The estimates for the linear regression model and the generalized logistic regression model provide the same estimates for the explanatory variables, in our case, the proportion of votes for Mr. Joe Biden, however, the variances for each explanatory variable will differ.
+
+Linear regression general formula: 
+$$ y = \beta_0 + \beta_1x_1 + \epsilon $$
+
+Since the outcome of the response variable is either 1 or 0 (1 indicating a vote for Joe Biden), a logistic regression can be used to address the binary response variable [@citeAndrew].  The function *glm* from the  allows defining of the response variable to a binomial distribution to the logistic regression.  For p as the probability of support for Joe Biden, the logistic regression can be modelled in this formula:
+
+$$ \log(\frac{p}{1-p}) = \beta_0 + \beta_2x_2 + ... + \beta_kx_k$$
+
+The coefficients in this logistic regression model represent the change in log odds of support for Joe Biden.  Since gender was only recorded as either ‘male’ or ‘female, this explanatory variable is binary.  Race, education, state and age group were all categorical variables
+By conducting logistic regression on the multiple explanatory variables with multiple levels, a few things jumped out.  Since many variables and cells are being represented in the model, we wanted to find out which explanatory variables were statistically important to the raw data obtained from the sample in order to find the best fitting models for predicting on other populations.  Certain variables could be identified as statistically important by evaluating the p-values for each, and the estimate for each coefficient.
+Our second approach in modelling predictions was to fit a Bayesian model to address the fact that we are predicting a variable in the census data based on the survey data.  In using a Bayesian model, we intended to compare our prediction results with a frequentist model to compare how much the prediction was influenced by the census proportions.  We used the *brm* function from the **brms** package [@citebrms, @citerstan] and organized the data and results with the **tidybayes** [@citetidybayes] ,**tidyverse** [@citetidyverse], **magrittr** [@citemagrittr], **gridExtra** [@citegridExtra], usmap [@citeusmap], **scales** [@citescales], **haven** [@citehaven], **broom** [@citebroom] and **here** [@citehere] packages.  Bayesian inference assumes certain priors about the parameters of interest, meaning that the parameters are not fixed, rather they follow some type of distribution [@citePChristianBurkner].  Since our parameter of interest is being formed in the post-stratification data, our new parameter of interest is the proportion of Biden support in the census population, which also has a random binary outcome.  In the Bayesian model, we assume a bernoulli distribution for the support of Joe Biden in the US 2020 election. 
+
+Bayes’ Rule: $$ P(A|B) = \frac{P(B|A)P(A)}{P(A)} $$
+
+A is the prior distribution that is assumed about the parameter of interest, in our case the distribution of the proportion of Biden support in the census data whereas B is the census data [@citeDSimpson]. 
+
+Bernoulli Distribution: 
+$$ f(k;p) = \begin{cases} p & \text{if k$ = 1$}, \\ 1- p & \text{if k = 0}. \end{cases} $$
+
+
+There are two main things to look out in this comparison of estimates based on the raw data and the MRP: how the post-stratification changes the estimate obtained from the raw data, and how much variance each estimate has based on each level of the variable.  In addition, analyzing the proportion of the census data and the survey data will provide additional insight on how the census proportions of groups affect the MRP estimate. As shown in Figure 19, where the estimates based on each State are being compared, the MRP estimate does not differ significantly from the raw data.   This indicates that the proportion of individuals surveyed residing in each state was similar to what was observed within the census data.  The red bars indicate the 97.5% confidence interval for each estimate.
+
+
+#Results
+
+
+```{r popplots, echo = FALSE, warning = FALSE, message = FALSE, fig.cap = "Demographic Proportions"}
+load("plot_data.rda") # created in previous chunk
+ggplot(data=plot_data, aes(x=as.factor(CAT), y=PROP, group=as.factor(TYPE), linetype=as.factor(TYPE))) +
+  geom_point(stat="identity",colour='black')+
+  geom_line()+
+  facet_wrap( ~ VAR, scales = "free",nrow=1,ncol=5)+
+  theme_bw()+
+  scale_fill_manual(values=c('#1f78b4','#33a02c',
+                             '#e31a1c','#ff7f00','#8856a7'),guide=FALSE)+
+  scale_y_continuous(breaks=c(0,.25,.5,.75,1), labels=c('0%','25%',"50%","75%","100%"))+
+  scale_alpha_manual(values=c(1, .3))+
+  ylab('Proportion')+
+  labs(alpha='')+
+  theme(legend.position="bottom",
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        legend.title=element_blank(),
+        legend.text=element_text(size=10),
+        axis.text=element_text(size=10),
+        strip.text=element_text(size=10),
+        strip.background = element_rect(fill='grey92'), axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r popplots1, echo = FALSE, warning = FALSE, message = FALSE, fig.cap= "Proportions by State", fig.height = 5}
+
+load("state_plot_data.rda") # created in previous chunk
+ggplot(data = state_plot_data, aes(x=as.factor(CAT), y=PROP, group=as.factor(TYPE),linetype=as.factor(TYPE))) +
+  geom_point(stat="identity",colour='black')+
+  geom_line()+
+  facet_wrap( ~ VAR)+
+  theme_bw()+
+  scale_fill_manual(values=c('#1f78b4','#33a02c',
+                             '#e31a1c','#ff7f00','#8856a7'),guide=FALSE)+
+  scale_y_continuous(breaks=c(0,.06,.120,1), labels=c('0%','6%',"12%","100%"),expand=c(0,0),limits=c(0,.125))+
+  scale_alpha_manual(values=c(1, .3))+
+  ylab('Proportion')+
+  labs(alpha='')+
+  theme(legend.position="bottom",
+        axis.title.y=element_blank(),
+        axis.title.x=element_blank(),
+        legend.title=element_blank(),
+        legend.text=element_text(size=10),
+        axis.text.y=element_text(size=10),
+        axis.text.x=element_text(size=8,angle=90),
+        strip.text=element_text(size=10),
+        strip.background = element_rect(fill='grey92')) 
+
+```
+
+
+## Bayesian Approach to MRP
+
+```{r bayes, echo = FALSE, message = FALSE, warning = FALSE}
+
+# Forming the bayes model
+bayes_model <- brm(dummy_vote ~ (1|gender) + (1|age) + (1|state) + (1|education) + (1|race),
+                data = survey_data,
+                family = bernoulli(),
+                file = "brms_model", control = list(adapt_delta = 0.98))
+bayes_model <- read_rds("brms_model.rds")
+
+```
+
+
+
+
+```{r bayes_est,echo = FALSE, message = FALSE, warning = FALSE}
+#Reading the .csv files with all the bayesian inference estimates of the data
+post_strat_est <- read.csv("post_strat_est.csv")
+post_strat_est_race <- read.csv("post_strat_est_race.csv")
+post_strat_est_age <- read.csv("post_strat_est_age.csv")
+post_strat_est_gender <- read.csv("post_strat_est_gender.csv")
+post_strat_est_edu <- read.csv("post_strat_est_edu.csv")
+```
+
+Figures 19-23 are graph the distibution of estimates using Bayesian inference in the **brms** package [@citebrms].
+
+```{r bayesplot, echo = FALSE, message = FALSE,warning = FALSE, fig.cap = "Comparing Survey Estimates with MRP Estimates by State",fig.width = 6, fig.height = 3}
+## Comparing Survey Estimates with MRP Estimates based by State
+post_strat_est %>%
+ggplot(aes(y = mean, x = forcats::fct_inorder(state), color = "MRP estimate")) + geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 2) + ylab("Proportion Biden Support") + xlab("State") + geom_point(data = survey_data %>% 
+                                                                                           group_by(state, dummy_vote) %>%
+                                                                                           summarise(n = n()) %>%
+                                                                                           group_by(state) %>%
+                                                                                           mutate(prop = n/sum(n)) %>%
+                                                                                           filter(dummy_vote==1),
+                                                                                         aes(state, prop, color = "Raw Data")) + theme(axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+The prediction of proportion of support for Biden in the post-stratification across each state shown in Figure 19 does not seem to differ much from the original proportions found in the sample distribution, considering that each state has relatively the same amount of proportions across both datasets, this is not surprising. However, there were a few states that had quite different estimates.  Vermount, Rhode Island and New Mexico were estimated to be less supportive of Joe Biden in the MRP modelling whereas Alaska and North Dakota were more supportive of Joe Biden than in the original raw sampling data.
+
+```{r bayesplot1, echo = FALSE,message = FALSE, warning = FALSE, fig.cap = "Comparing Survey Estimates with MRP Estimates by Age",fig.width = 6, fig.height = 3}
+
+#Comparing Survey Estimates with MRP Estimates based by Age
+post_strat_est_age %>%
+ggplot(aes(y = mean, x = forcats::fct_inorder(age), color = "MRP estimate")) + geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0) + ylab("Proportion Biden Support") + xlab("Age") + geom_point(data = survey_data %>% 
+                                                                                           group_by(age, dummy_vote) %>%
+                                                                                           summarise(n = n()) %>%
+                                                                                           group_by(age) %>%
+                                                                                           mutate(prop = n/sum(n)) %>%
+                                                                                           filter(dummy_vote==1),
+                                                                                         aes(age, prop, color = "Raw Data"))
+```
+
+The estimate for the Biden support for individuals in age group 18-19 were slightly higher in the raw data shown in Figure 20.  However, this age group was still particularly in high favor of Joe Biden as both estimates were over 60%.  Individuals in the 30-45 age category seemed to respond more to the polling survey, thus creating slightly biased results.   However, the estimates for individuals in the 30-45 age category were consistent in the post-stratification data and the survey data.  It appears that among both groups, older age groups appear to be less supportive of Joe Biden, but only marginally.
+
+```{r bayesplot2, echo = FALSE, message = FALSE,warning = FALSE, fig.cap = "Comparing Survey Estimates with MRP Estimates by Race",fig.width = 6, fig.height = 5}
+
+# Comparing Survey Estimates with MRP Estimates based by Gender
+post_strat_est_race %>%
+ggplot(aes(y = mean, x = forcats::fct_inorder(race), color = "MRP estimate")) + geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0) + ylab("Proportion Biden Support") + xlab("Race") + geom_point(data = survey_data %>% 
+                                                                                           group_by(race, dummy_vote) %>%
+                                                                                           summarise(n = n()) %>%
+                                                                                           group_by(race) %>%
+                                                                                           mutate(prop = n/sum(n)) %>%
+                                                                                           filter(dummy_vote==1),
+                                                                                         aes(race, prop, color = "Raw Data")) +
+  theme(axis.text.x = element_text(angle = 60, hjust = 1))
+
+```
+
+Estimates between survey data and post-stratification data remain relatively the same for race shwon in Figure 21.  Among black/African Americans, Chinese and Japanese age groups, Biden appears to be well supported with estimates exceeding 70% for each age group.  American Indian and Alaska Natives as well as white individuals were slightly less supportive.  Based on this graph alone it would appear that Joe Biden would have a significant lead, however, the proportion of white individuals in the census population and the survey population exceeds 75%, comprising a significant portion of the population.
+
+```{r bayesplot3, echo = FALSE,message = FALSE, warning = FALSE, fig.cap= "Comparing Survey Estimates with MRP Estimates by Gender",fig.width = 6, fig.height = 3}
+#Comparing Survey and MRP estimates by Gender
+post_strat_est_gender %>%
+ggplot(aes(y = mean, x = forcats::fct_inorder(gender), color = "MRP estimate")) + geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0) + ylab("Proportion Biden Support") + xlab("Gender") + geom_point(data = survey_data %>% 
+                                                                                           group_by(gender, dummy_vote) %>%
+                                                                                           summarise(n = n()) %>%
+                                                                                           group_by(gender) %>%
+                                                                                           mutate(prop = n/sum(n)) %>%
+                                                                                           filter(dummy_vote==1),
+                                                                                         aes(gender, prop, color = "Raw Data"))
+
+```
+
+On average, females tend to be more supportive of Joe Biden while males tend to support Donald Trump as shwon in Figure 22.  Although females represent more of the census population than males, this is not reflected in the survey where males had a slightly higher response rate.  This is reflected in the difference between estimates of females being decreased in the MRP estimate by almost 5%.
+
+```{r bayesplot4, echo = FALSE, message = FALSE,warning = FALSE, fig.cap = "Comparing Survey Estimates with MRP Estimates by Education",fig.width = 6, fig.height = 3}
+# Comparing Survey Estimates with MRP Estimates by Education
+post_strat_est_edu %>%
+ggplot(aes(y = mean, x = forcats::fct_inorder(education), color = "MRP estimate")) + geom_point() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), width = 0) + ylab("Proportion Biden Support") + xlab("Education") + geom_point(data = survey_data %>% 
+                                                                                           group_by(education, dummy_vote) %>%
+                                                                                           summarise(n = n()) %>%
+                                                                                           group_by(education) %>%
+                                                                                           mutate(prop = n/sum(n)) %>%
+                                                                                           filter(dummy_vote==1),
+                                                                                         aes(education, prop, color = "Raw Data"))+
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+ It appears that there is an overrepresentation of individuals who have graduated college who responded to the surveys reflected in Figure 23.  In addition, there is an underrepresentation of those who had just graduated high school.  The MRP estimate was lower than the raw data for both individuals who graduated high school and who did not graduate high school.
+
+
+
+# Discussion
+
+
+Information of interest collected through surveys is often not representative of the population that we are looking into.  Due to the nature of traditional surveys, accurately representing the actual population of interest is difficult, expensive, timely and perhaps impossible when dealing with very large-scaled populations.  Luckily, there are some ways to address this issue by using MRP to correct misproportions in samplings.   Survey data collected from the Democracy Fund Voter Study Group employed stratified sampling.  Stratified sampling divides the population into subpopulations based on certain characteristics or attributes.  These subpopulations are called strata.  Stratified sampling helps to somewhat control the proportions of certains groups being included in the sample instead of having all groups of individuals having an equal chance to be represented in the survey.   Thus the sampling data is very extensive and somewhat pre-weighted due to stratified sampling,  however, looking at the differences in proportions between each group there still exists  some sampling biases for certain groups, such as age.  Indicated in the logistic regression, certain factors such as age, gender and race had lower p-values, indicating they were more statistically important to the model than variables such as state.  Only certain  states reported low p-values, such as Connecticut, Massachusetts and Vermont, indicating statistical importance on the logistical model.
+In the  logistic regression and Bayesian model, we found that Biden had a predicted vote proportion of  50.1% and 51.03%, respectively . Considering that the proportions of all the levels of variables did not differ greatly, except across age groups, the predictions remained relatively  similar to each other.  The survey data was already pre-weighted to a certain extent using stratified sampling, therefore proportions across race for each of the datasets were very similar.  The main difference between proportions in the datasets was within the age group, where younger individuals tended not to respond to surveys as much as middle-aged individuals. The MRP estimates that were quite different from the raw data for each state were moste likely affected by the different age groups sampled and possibly even gender.  We must also not forget about particular cells to identify any cross sectional relevance of the variables and if there is any type of relationship for certain groups.  Conducting MRP over 5 variables of interest helped to identify and narrow down key variables and levels that could further influence voting choice in the US 2020 elections.
+
+It is worthwhile to mention that the survey used was collected back in June.  Since then, many events surrounding the election have changed public opinion of both candidates, and therefore will ultimately affect the final outcome of the US 2020 Presidential Election taking place on November 3rd, 2020.  Further work might look into conducting bayesian inference models across time to model changes over periods of time leading up to the election to provide further insight.  Time series analysis can be helpful in understanding trends that are relative to the election date.
+
+MRP can be used as a tool when a population of interest is identified with key variables that can affect the variable of interest, which can be matched to a sample population to formulate inferences.  Comparing the sample estimate of Joe Biden support with the forecasted estimates on the census population provides further tools for research to explore nuances in the data and additional differences.  MRP ultimately can identify certain variables of interest as predictions to perform smaller scaled polling to include more levels of variables of the data that were hidden in the way we categorized individuals within  each of the groups, such as  race and education in our case.    It is relatively quick, easy and cost effective to perform on data given a survey with matching key variables with a more representative population. 
+
+MRP has lead many studies to significant and representative models on actual populations from samples, however it does not come without flaws.  Insufficient estimates can be caused by lack of some demographic predictors, insufficient data from surveying as well as lack of regularization.  In some cases, selecting certain variables as predictors lead to extremely small cell counts for certain groups, therefore producing unstable estimations.  Through our cleaning process of both datasets, some tweaking of the variables and levels had to be made in order to match all variables to perform MRP.  The sample data was extremely extensive and all-inclusive of any possible variable, however this is not always the case.  The way that information demographic variables and in the sample and census data are sometimes collected and recorded in different forms.  [@citeLKennedy] [@citeAGelman].
+
+# Appendix:
+
+```{r appendix, message = FALSE,warning = FALSE, echo=FALSE}
+#List of tables for post-stratification data.
+grid.arrange(tableGrob(edustat), top = "Table 1: Level of Education Statistics")
+
+
+
+grid.arrange(tableGrob(agestat), top = "Table 2: Age Statistics")
+
+
+
+grid.arrange(tableGrob(genstat), top = "Table 3: Gender Statistics")
+
+
+
+
+grid.arrange(tableGrob(racestat), top = "Table 4: Race Statistics")
+
+
+```

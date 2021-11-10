@@ -1,0 +1,8 @@
+{
+    "python.linting.enabled": true,
+    "cSpell.ignoreWords": [
+        "sqoop",
+        "sqoop zoopkeeper",
+        "zoopkeeper"
+    ]
+}

@@ -1,0 +1,33 @@
+{
+	"folders": [
+		{
+			"path": "."
+		}
+	],
+	"settings": {
+		"cSpell.words": [
+			"Bigml",
+			"Isomap",
+			"Knime",
+			"Rapidminer",
+			"dtype",
+			"interpretability",
+			"isnumeric",
+			"javac",
+			"matmul",
+			"multicollinearity",
+			"nonliner",
+			"numpy",
+			"nums",
+			"overfitting",
+			"scipy",
+			"strftime"
+		],
+		"files.exclude": {
+			"**/.classpath": true,
+			"**/.project": true,
+			"**/.settings": true,
+			"**/.factorypath": true
+		}
+	}
+}

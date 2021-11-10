@@ -1,0 +1,53 @@
+
+{
+  "clusterName": "hadoop-demo",
+  "config": {
+    "configBucket": "",
+    "gceClusterConfig": {
+      "zoneUri": "asia-east1-c",
+      "metadata": {},
+      "subnetworkUri": "default"
+    },
+    "masterConfig": {
+      "numInstances": 1,
+      "machineTypeUri": "n1-standard-4",
+      "diskConfig": {
+        "bootDiskType": "pd-standard",
+        "bootDiskSizeGb": 500,
+        "numLocalSsds": 0
+      },
+      "accelerators": []
+    },
+    "workerConfig": {
+      "numInstances": 2,
+      "machineTypeUri": "n1-standard-2",
+      "diskConfig": {
+        "bootDiskType": "pd-standard",
+        "bootDiskSizeGb": 500,
+        "numLocalSsds": 0
+      },
+      "accelerators": []
+    },
+    "softwareConfig": {
+      "imageVersion": "1.4-ubuntu18",
+      "properties": {},
+      "optionalComponents": [
+        "ANACONDA",
+        "HIVE_WEBHCAT",
+        "JUPYTER",
+        "DRUID",
+        "PRESTO",
+        "ZOOKEEPER"
+      ]
+    },
+    "secondaryWorkerConfig": {
+      "numInstances": 0,
+      "isPreemptible": true
+    },
+    "endpointConfig": {
+      "httpPorts": {},
+      "enableHttpPortAccess": true
+    }
+  },
+  "projectId": "hadooptest-288515"
+}

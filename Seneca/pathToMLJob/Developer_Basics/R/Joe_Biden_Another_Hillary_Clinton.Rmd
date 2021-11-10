@@ -1,0 +1,478 @@
+---
+title: "Joe Biden, Another Hillary Clinton? 2020 US Federal Election"
+subtitle: "Multilevel Regression with Post-stratification (MRP) Framework Made the Prediction"
+author: "Guannan Shen"
+thanks: "Code are available at: https://github.com/Guannan-Shen/pathToMLJob/tree/master/Developer_Basics/R"
+date: "November 2, 2020"
+abstract: |
+  | There is no doubt that the most important political event taking place right now in the second half year of 2020 is the United States Federal Election, either Donald Trump or Joe Biden, who can win the throne in the White House remains unknown. As the COVID-19 pandemic continues, people all over the world have never been this desperate to know the results of the 2020 United States Federal Election, which might determine the global political and economic trends in the next several years. In this study, the multilevel (logistic) regression with post-stratification (MRP) framework was trained with the Nationscape survey data, then the prediction was made with American Community Survey (ACS) national census data which is the dataset considered to be unbiased and representative. Our work demonstrated that, Joe Biden might win the overall popular vote by 1.76% but lose the electoral vote, by including socio-economic, demographic, and geographic features such as gender, age groups, education and household income into the model. 
+  |
+  | **Keywords:** forecasting; Trump; Biden; multilevel regression with post-stratification (MRP); US 2020 Election;
+output:
+  pdf_document: 
+    latex_engine: lualatex
+header_includes: 
+   - \usepackage{amsmath} 
+   - \usepackage{dcolumn}
+toc: FALSE
+bibliography: references.bib
+---
+
+
+```{r setup, include=FALSE, cache = FALSE}
+# knitr settings
+require("knitr")
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+opts_chunk$set(engine = "R")
+knitr::opts_chunk$set(echo = T)
+knitr::opts_chunk$set(message = F)
+knitr::opts_chunk$set(warning = F)
+## setting wd in DELL
+# opts_knit$set(root.dir = "~/Documents/")
+                                                 
+## cache = F, if cache = T, will not revaluate code chunk everytime
+## double or more space to insert a line break
+```
+
+
+```{r libs, echo = FALSE, warning= F}
+######################
+## Set up workspace
+######################
+# rm(list = ls())
+# load required packages
+require(tidyverse)
+require(captioner)
+# require(stargazer)
+library(gridExtra)
+library(broom)
+require(arsenal)
+require(magrittr)
+
+# require(magrittr)
+# require(forcats)
+
+options(stringsAsFactors = F)
+options(dplyr.width = Inf)
+# getwd()
+
+# ######## clean memory ######################
+# rm(list = ls())
+# gc()
+# is(dds)
+# slotNames(dds)
+```
+
+
+
+# Introduction
+
+The 2020 United States (US) election is coming to its final stage, and people still have no idea who will gain the key to the White House. The Guardian reported on Oct 24 2020, that the US 2020 election might have the highest voter turnout rate since 1908, which showed that this election has drawn more attentions than ever. Therefore, it is very important and interesting to forecast whether Donald Trump or Joe Biden will win this election, based on the current election polls.
+
+There are several famous failures of federal election forecasts. In 1936, the popular magazine Literal Digest incorrectly predicted that Franklin Roosevelt would lose, based on a two-million responses mail-in survey [@Forecasting]. In the 2016 United States (US) federal election, most institutions failed to predict that Donald Trump won against Hillary Clinton. Those failed forecasts suggest that the pool of respondents can be highly biased, which would be detrimental to the results of the predictions. Hence, representative polls have been used extensively to make election predictions, where randomly sampled individuals are asked who they would like to vote for. Although this approach has been proved to be effective, it is faced with several challenges: 1) the cost of time and money is becoming enormous; 2) the response rates are keeping decreasing in the past several decades. Moreover, a trend which is worth noting is that large non-representative online surveys are much cheaper to collect and becoming more and more popular. 
+
+As a result, people are seeking alternatives, such as using non-representative polls, together with the benefits of proper statistical adjustment. With this approach, one could make accurate predictions based on faster and less expensive survey sampling methods. Hereby, the previously published method, multilevel regression with post-stratification (MRP) was adopted to forecast the federal election, using the model training dataset Nationscape survey data and the post-stratification representative census data ACS data [@surveyData; @Ipums; @Forecasting]. 
+
+In this work, the multilevel logistic regression model was fitted using the `glm` function in `R`, the response variable, vote, was dichotomized as either Trump or Biden, where the Trump is the base level. At the first, the model was trained with the Nationscape survey data. The survey data was taken from the most recent week of survey, which was June 25 2020. There are 6479 person level observations in the survey data initially. Then the prediction was made with a slice of the full 2018 ACS census data, which contains 613777 person level observations. Both of the datasets were filtered by missing values and eligibility of voting. Particularly, only observations with age greater than 17 and have US citizenship eligible to vote were included. To fully take the advantages of the MRP framework, variables were all categorized and all levels of the categorical variables were matched between the two datasets. During the modeling stage, our model started with a set of variables which are known to be closely associated with voting preference, including age groups, gender, state of the voter and race [@Forecasting]. Then, three socio-economic variables including household income, employment status and education levels were incorporated into the models, and eventually the model with the lowest  Akaike information criterion (AIC) was used to make the prediction. Because a lower AIC value indicates a better fit. With the ACS census data, the probability of voters voting for Biden was estimated. The popular vote is estimated as the population-level average of the probability. The vote preference was also estimated by probability cutoff 0.5, while probability greater than 0.5 means voting for Biden, otherwise Trump. With this approach, a rough estimate of electoral votes by state was generated. 
+
+Our prediction results demonstrated that Joe Biden might win the popular vote with 51.76% of all votes. However, if the voting probability was dichotomized as we did by the cutoff 0.5, Donald Trump might win the electoral votes of 29 states, including crucial swing states such as Arizona, Florida, Iowa, North Carolina, Ohio, Pennsylvania, while Joe Biden might only win swing states including Michigan and Wisconsin. 
+
+```{r load_data, echo = FALSE, warning = FALSE,message = FALSE}
+survey_data <- read_csv("survey.csv")
+census_data <- read_csv("census.csv")
+```
+
+# Methods
+
+## Data
+
+The framework used in this work is multilevel regression with post-stratification (MRP). In general, a model was trained firstly using non-representative survey data, then the prediction was made with post-stratification dataset. Thus, two datasets were required by this framework and used in this work. Both of the datasets were used with permission, but sharing and uploading the datasets were not allowed.
+
+The first dataset was survey data of US election polls, Nationscape Data, from the Voter Study Group [@surveyData]. The survey data of the June 25th 2020 wave from the Phase 2 of Nationscape Data was used in this work. Nationscape carries out surveys every week. July 18th, 2019 was the first wave that goes into the field [@surveyData]. For Phase 1 the last wave went into the field on December 26, 2019. For Phase 2 the last wave went into the field on June 25, 2020 [@surveyData].
+
+Democracy Fund Voter Study Group is the source for used survey dataset. It carries out interviews of American voters every week throughout last year July to this year December [@surveyData]. The week of July 25 is the recent data in the dataset. The population is the electorate of the United States, and the sampling frame is a list of online respondents from a market research platform [@surveyData]. The sample is not a simple random sample [@surveyData]. On the contrary, they used purposive sampling to secure a sample, which is selecting respondents depend on their characteristics. The sample itself is constructed to be symbolic of the population regarding a certain set of characteristics [@surveyData]. The survey data is then weighted to represent the US population.
+
+As for the mode of interview, it was run online anywhere as long as the respondent can have the access to a networked computer or mobile device [@surveyData]. The questionnaires every week are created for a 15-minute median administration time [@surveyData]. The Nationscape pilot survey is provided in alternative or in English, and the chooser can choose the language on a question-by-question basis [@surveyData]. Depending on the wave,the survey has an average yield of approximately 75% of the original invited samples [@surveyData].
+
+The second dataset was US national census data, American Community Survey (ACS) 2018, which is person-level data as well [@Ipums]. In the U.S. census, respondents answered questionnaires sent by mail from the 1960 census onward. Particularly, the ACS 2018 is 1-in-100 national random weighted sample of the population, and the data include persons in group quarters [@Ipums].
+
+One thing worth mentioning is that there is a data collection error in New Castle County, DE resulted in higher allocation rates for the several topics such as ancestry, commuting, disability and employment status. This did not affect our results since our final model did not contain those variables.
+
+The target population of the census data is every resident of the United States. The sample population is all residential areas within the United States such as group homes, university dormitories and housing units, so that the sampling frame is a list of residential areas selected from the population [@Ipums]. There are two phases of sampling that has a list of all residential areas and specific non-residential buildings provided from “Master Address File” by US Census Bureau. Firstly, new samples are selected in September/October of the previous year, and then non-responding addresses are selected for personal interviewing (in January of the current year). This would decrease the percentage of non-respondents. The data collection is conducted by different approaches, including internet, mail, telephone and personal visit. 
+
+The characteristics of survey data and census data were summarized through tables (Table 1. and Table 2.). The by state vote preference of the survey data was shown in Figure 1. In general, this survey data suggests that Donald Trump is leading in crucial swing states such as Arizona, Florida and Pennsylvania, while Joe Biden is leading in swing states including Iowa, North Carolina, Ohio, Michigan and Wisconsin. 
+
+Moreover, the distribution of age groups and household income groups were compared in Figure 2 and Figure 3. With the assumption that the census data is unbiased representative data, one can tell that the age distribution and household income distribution of the survey data is different from the census data. In the census data, the largest age group is “60+”, and the household income is much less compared with the survey data, generally. In summary, it indicates that the post-stratification with census dataset is very important. 
+
+
+```{r tablesNumber, include=FALSE}
+# numbering of tables with captions 
+table_nums <- captioner::captioner(prefix = "Table.")
+# Table captions 
+tab.1_cap <- table_nums(name = "tab_1", 
+                        caption = "Characteristics Summary of the 2020-06-25 Nationscape Survey Data")
+tab.2_cap <- table_nums(name = "tab_2", 
+                        caption = "Characteristics Summary of the 2018 ACS Census Data")
+
+```
+
+
+```{r orderData, include=FALSE}
+# reorder data of survey_data, for all categorical variables 
+survey_data$age %<>% as.factor()
+survey_data$gender %<>% as.factor()
+survey_data$race %<>% as.factor()
+survey_data$education %<>% as.factor()
+survey_data$household_income %<>% as.factor()
+survey_data$employment %<>% as.factor()
+survey_data$stateid %<>% as.factor()
+survey_data$state %<>% as.factor()
+
+# revalue and relevel vote, Donald Trump as the base level
+survey_data$vote %<>% as.factor()
+survey_data$vote <- plyr::revalue(survey_data$vote, c("0" = "Donald Trump", "1" = "Joe Biden"))
+survey_data$vote %>% levels()
+
+# the levels of age is fine 
+survey_data$age %>% levels()
+survey_data$gender %>% levels()
+survey_data$race %>% levels()
+survey_data$employment %>% levels()
+survey_data$stateid %>% levels()
+
+# reorder the levels 
+survey_data$education <- factor(survey_data$education ,
+                                        levels(survey_data$education )[c(3, 4,1:2)])
+survey_data$household_income <- factor(survey_data$household_income,
+                                      levels(survey_data$household_income)[c(5, 3, 4,1:2)])
+
+
+# reorder data of census data, the same 
+census_data$age %<>% as.factor()
+census_data$gender %<>% as.factor()
+census_data$race %<>% as.factor()
+census_data$education %<>% as.factor()
+census_data$household_income %<>% as.factor()
+census_data$employment %<>% as.factor()
+census_data$stateid %<>% as.factor()
+census_data$state %<>% as.factor()
+
+# reorder the levels 
+census_data$education <- factor(census_data$education ,
+                                        levels(census_data$education )[c(3, 4,1:2)])
+census_data$household_income <- factor(census_data$household_income,
+                                      levels(census_data$household_income)[c(5, 3, 4,1:2)])
+```
+
+`r table_nums('tab_1')`
+
+```{r table1, fig.cap=tab.1_cap, echo = FALSE}
+# Characteristics summary table, EDA stage
+my_labels <- list(
+  age = "Age",
+  gender = "Gender",
+  race = "Race/Ethnicity",
+  education = "Education",
+  household_income = "Household Income",
+  employment = "Employment Status"
+)
+
+
+table1 <- tableby(~age + gender + race + education + household_income + employment, data = survey_data)
+summary(table1, labelTranslations = my_labels) %>% 
+   kable()
+
+```
+
+
+`r table_nums('tab_2')`
+
+```{r table2, fig.cap=tab.2_cap, echo = FALSE}
+# Characteristics summary table, EDA stage, combination of levels 
+
+table2 <- tableby(~age + gender + race + education + household_income + employment, data = census_data)
+summary(table2, labelTranslations = my_labels) %>% 
+   kable()
+
+```
+
+
+
+```{r survey, fig.cap="2020-06-25 Nationscape Election Poll by State", message = FALSE,echo = FALSE, warning=FALSE, fig.height = 8, fig.width = 6}
+#COmpare the percentage of people from each state voting for either candidate.
+fontSize <- 12
+df <- survey_data %>%
+           group_by(state, vote) %>% summarize(n = n()) %>% 
+            mutate(pct = n/sum(n),  lbls = scales::percent(pct))
+
+p1 <- ggplot(df, 
+       aes(x = factor(state), y = pct, fill = vote )) + 
+  coord_flip() +
+  geom_bar(stat = "identity", position = "fill" ) +
+           # , width = 1.5 ) +
+  scale_y_continuous(breaks = seq(0, 1, .2), label = scales::percent) +
+  geom_text(aes(label = lbls),  size = 3,  position = position_stack(vjust = 0.5), color = "black") +
+  scale_fill_grey(start = 0.6, end = 0.8) +
+  labs(y = "Relative Frequency", x = "States", fill = "2020/06/25 Nationscape Election Poll")+
+  theme_minimal() +
+ theme(axis.text.x = element_text(size = fontSize -2, colour = "black"),
+      axis.text.y = element_text(size = fontSize - 2, colour = "black"),
+      axis.title.x = element_text(size = fontSize),
+      axis.title.y = element_text(size = fontSize),
+      legend.text = element_text(size= fontSize - 2),
+      legend.title = element_text(size= fontSize),
+      legend.position="bottom")
+
+p1 
+```
+
+
+
+
+
+```{r compareplot1, echo = FALSE, message = FALSE, fig.cap="Comparison of Age Distributions Between Two Datasets",  fig.height = 4, fig.width = 6}
+fontSize <- 12
+p1 <- ggplot(data = survey_data, aes(age)) +
+      geom_bar(aes(y = stat(count)/sum(stat(count))), width = 0.5 ) +
+   labs(y = "Relative Frequencies", caption = "Age Distribution of Nationscape Survey Data") + 
+  scale_y_continuous(labels=scales::percent) + 
+   # scale_fill_brewer(type = "div", palette = "RdBu") +
+  theme_bw() +
+  # geom_text(aes(Age, MedianIn + 3000, label = round(MedianIn,2) ), color = "black", size = 4) +
+theme(axis.text.x = element_text(size = fontSize -2, colour = "black"),
+      axis.text.y = element_text(size = fontSize - 2, colour = "black"),
+      axis.title.x = element_text(size = fontSize),
+      axis.title.y = element_text(size = fontSize),
+      legend.text = element_text(size= fontSize - 2),
+      legend.title = element_text(size= fontSize),
+      legend.position="bottom")
+
+p2 <- ggplot(data = census_data, aes(age)) +
+      geom_bar(aes(y = stat(count)/sum(stat(count))), width = 0.5 ) +
+   labs(y = "Relative Frequencies", caption = "Age Distribution of 2018 ACS Census Data") + 
+  scale_y_continuous(labels=scales::percent) + 
+   # scale_fill_brewer(type = "div", palette = "RdBu") +
+  theme_bw() +
+  # geom_text(aes(Age, MedianIn + 3000, label = round(MedianIn,2) ), color = "black", size = 4) +
+theme(axis.text.x = element_text(size = fontSize -2, colour = "black"),
+      axis.text.y = element_text(size = fontSize - 2, colour = "black"),
+      axis.title.x = element_text(size = fontSize),
+      axis.title.y = element_text(size = fontSize),
+      legend.text = element_text(size= fontSize - 2),
+      legend.title = element_text(size= fontSize),
+      legend.position="bottom")
+
+grid.arrange(p1, p2, nrow = 1)
+
+```
+
+
+```{r compareplot2, echo = FALSE, message = FALSE, fig.cap="Comparison of Household Income Distributions Between Two Datasets",  fig.height = 5, fig.width = 8}
+fontSize <- 12
+p1 <- ggplot(data = survey_data, aes(household_income)) +
+      geom_bar(aes(y = stat(count)/sum(stat(count))), width = 0.5 ) +
+   labs(y = "Relative Frequencies", caption = "Household Income Distribution of Nationscape Survey Data", x = "Household Income") + 
+  scale_y_continuous(labels=scales::percent) + 
+   # scale_fill_brewer(type = "div", palette = "RdBu") +
+  theme_bw() +
+  # geom_text(aes(Age, MedianIn + 3000, label = round(MedianIn,2) ), color = "black", size = 4) +
+theme(axis.text.x = element_text(size = fontSize -2, 
+                                 colour = "black", angle = 45 , hjust = 0.6, vjust = 0.6),
+      axis.text.y = element_text(size = fontSize - 2, colour = "black"),
+      axis.title.x = element_text(size = fontSize),
+      axis.title.y = element_text(size = fontSize),
+      legend.text = element_text(size= fontSize - 2),
+      legend.title = element_text(size= fontSize),
+      legend.position="bottom")
+
+p2 <- ggplot(data = census_data, aes(household_income)) +
+      geom_bar(aes(y = stat(count)/sum(stat(count))), width = 0.5 ) +
+   labs(y = "Relative Frequencies", x = "Household Income",
+        caption = "Household Income Distribution of 2018 ACS Census Data") + 
+  scale_y_continuous(labels=scales::percent) + 
+   # scale_fill_brewer(type = "div", palette = "RdBu") +
+  theme_bw() +
+  # geom_text(aes(Age, MedianIn + 3000, label = round(MedianIn,2) ), color = "black", size = 4) +
+theme(axis.text.x = element_text(size = fontSize -2, 
+                                 colour = "black", angle = 45 , hjust = 0.6, vjust = 0.6),
+      axis.text.y = element_text(size = fontSize - 2, colour = "black"),
+      axis.title.x = element_text(size = fontSize),
+      axis.title.y = element_text(size = fontSize),
+      legend.text = element_text(size= fontSize - 2),
+      legend.title = element_text(size= fontSize),
+      legend.position="bottom")
+
+grid.arrange(p1, p2, nrow = 1)
+
+```
+
+## Model
+
+Post-stratification is a well-known method to conduct statistical adjustment of biased samples, where the core technique is to partition the population into cells. Particularly, the cells are based on combinations of different socio-economic, demographic, and geographic features such as age groups and income levels, then the response variables are estimated within each cell, and eventually the population-level estimates are obtained through weighed aggregation of cell-level estimates where the weights are based on the relative proportion in the population [@Forecasting]. In order to generate stable and accurate cell-level estimates, a multilevel logistic regression model fitted, instead of simply taking the average within each cell. The combination of multilevel logistic regression and post-stratification is the MRP framework used in this work. 
+
+Initially, the survey data set had 6479 observations of 265 variables. The survey data was then filtered by age 18 years old and by eligibility of voting, and all null values were removed. The census data was also filtered by age 18 years old, only person older than 18 years old should be included in this study, and the citizenship was another filter criterier. All of the variables used in this dataset were categorized into groups. In this way, the requirement of the MRP framework was full-filled and all samples were grouped into small sub-cells. Several demographic, geographic, socio-economic variables which are known to be closely associated with voting preference were focused in this study [@Forecasting]. In details, variables such as state of the voter (state), education levels (education), gender,  age groups (age), race/ethnicity (race),  household income (household_income) and employment status (employment) were chosen as variables of interest. The response variable was vote_2020, which is the voting choice. Moreover, age, gender, state and race are key variables [@Forecasting; @multiDistrict]. AIC was used to decide whether to include household income, employment and education.
+
+The complete model was shown here: 
+
+\begin{equation}
+Vote \sim Bernoulli(\frac{1}{1 + exp(-(a + b_{i}x_{i} +  b_{education}x_{education} +  b_{household income}x_{household income} +  b_{employment}x_{employment} ))}) 
+\end{equation}
+\begin{equation}
+Vote \sim Bernoulli(\frac{1}{1 + exp(-(a + b_{i}x_{i} +  b_{education}x_{education} +  b_{household income}x_{household income}  ))}) 
+\end{equation}
+where the $a$ is the intercept, $b$ representing coefficients of different variables. Particularly, $b_{i}$ and $x_{i}$ represents the variables and corresponding coefficients set of age, gender, state and race, which are well-known variables and are closely associated with voting preference [@Forecasting; @multiDistrict]. 
+
+All multilevel logistic regression model were fitted with `glm` function in R [@R-base]. Particularly, the AIC of the full model is 5968.9, leaving out the variable household income, AIC is 5993.9, leaving out the employment status, AIC is 5970.1, and leaving out the education, AIC is 6007.5. Since the difference of AIC between the full model and model without employment is less than 2 (the empirical rule of AIC), the model without employment was chosen as the final model (Equation (2)). Specifically, we generated the cells by considering all possible combinations of gender (2 categories), race (4 categories), age (4 categories), education (4 categories), state (51 categories) and household_income (5 categories), thus partitioning the data into 32640 sub-cells.
+
+Equation (1) represents the complete model, and Equation (2) represents our final model, which did not include employment status.   
+
+
+```{r fitglm, include=FALSE}
+names(survey_data)
+# survey_data$stateid %>% levels()
+# glm, logistic regression with sex age place
+lg_full <- glm(vote ~ age + gender + stateid + race + education + employment + household_income,
+               data = survey_data, family = "binomial")
+broom::tidy(lg_full)
+summary(lg_full)
+
+# fit model without education
+lg_edu <- glm(vote ~ age + gender + stateid + race + employment + household_income,
+               data = survey_data, family = "binomial")
+summary(lg_edu)
+
+# fit model without household_income 
+lg_income <- glm(vote ~ age + gender + stateid + race + education + employment,
+               data = survey_data, family = "binomial")
+summary(lg_income)
+
+# fit model without employment 
+lg_employment <- glm(vote ~ age + gender + stateid + race + education + household_income,
+               data = survey_data, family = "binomial")
+summary(lg_employment)
+#
+anova(lg_full, lg_employment)
+
+# the model no employment was chosed as the final model 
+
+```
+
+
+All work were done in `R` (version 4.0.2) [@R-base] and `Rstudio` (version 1.3.1093). `Tidyverse` (version 1.3.0) was used for data wrangling and visualization [@Tidyverse]. R package `forcats` (version 0.5.0) was also used for data pre-processing [@Forcats]. There are other packages used such as `captioner`, `gridExtra`, `broom`, `Haven`, `magrittr`, `knitr`, `labelled` and `arsenal` [@Captioner; @Stargazer; @Arsenal; @Knitr; @Haven; @gridExtra; @Broom; @magrittr; @Labelled]. Code are available at: https://github.com/Chelsea-Cheng99/STA304/tree/master/2020USElection. 
+
+
+
+```{r predict, echo=FALSE, include= FALSE }
+# get the log odds of estimate
+census_data$rawestimate <-
+lg_employment %>%
+predict(newdata = census_data)
+
+# transform to probability 
+census_data$estimate <- as.numeric(exp(census_data$rawestimate)/(1+exp(census_data$rawestimate)))
+census_data %<>% drop_na()
+biden <- mean(census_data$estimate)
+
+# no probability == 0.5 found 
+census_data[census_data$estimate == 0.5,]
+# from estimate to vote, use prob cut = 0.5
+census_data <- census_data %>% mutate(vote = ifelse(estimate > 0.5, "Joe Biden", "Donald Trump"))
+
+```
+
+
+# Results
+
+```{r resState, fig.cap="Election Forecast with 2018 ACS Census Data by State", message = FALSE,echo = FALSE, warning=FALSE, fig.height = 9, fig.width = 7}
+fontSize <- 12
+df <- census_data %>%
+           group_by(state, vote) %>% summarize(n = n()) %>% 
+            mutate(pct = n/sum(n),  lbls = scales::percent(pct))
+# number of state Trump would take 
+result <- df[ (df$vote == "Donald Trump") & ( df$pct > 0.5) , -c(3,5)]
+number_states <- nrow(result)
+
+# generate plot 
+p1 <- ggplot(df, 
+       aes(x = factor(state), y = pct, fill = vote )) + 
+  coord_flip() +
+  geom_bar(stat = "identity", position = "fill" ) +
+           # , width = 1.5 ) +
+  scale_y_continuous(breaks = seq(0, 1, .2), label = scales::percent) +
+  geom_text(aes(label = lbls),  size = 3,  position = position_stack(vjust = 0.5), color = "black") +
+  scale_fill_grey(start = 0.6, end = 0.8) +
+  labs(y = "Relative Frequency", x = "States", fill = "Election Prediction with 2018 ACS Census Data")+
+  theme_minimal() +
+ theme(axis.text.x = element_text(size = fontSize -2, colour = "black"),
+      axis.text.y = element_text(size = fontSize - 2, colour = "black"),
+      axis.title.x = element_text(size = fontSize),
+      axis.title.y = element_text(size = fontSize),
+      legend.text = element_text(size= fontSize - 2),
+      legend.title = element_text(size= fontSize),
+      legend.position="bottom")
+
+p1 
+```
+
+The overall popular vote was estimated by taking the population-level average of the probability by aggregation of all sub-cells together. Thus, our model predicted that Joe Biden might win th popular vote with 51.76% of all votes. Another approach to treat the predicted probability is to dichotomize the probability as either Biden or Trump by cutoff 0.5. Since Trump is the base level in our vote response variable, a probability greater than 0.5 means voting for Biden in our case. Figure 4 demonstrated that, through this approach, Donald Trump might win the electoral votes of 29 states, including crucial swing states such as Arizona, Florida, Iowa, North Carolina, Ohio, Pennsylvania, while Joe Biden might only win swing states including Michigan and Wisconsin.
+
+# Discussion
+
+## What have we learnt from the model
+
+Our results show the similar pattern that age, gender, race and state are important variables in election prediction [@Forecasting; @multiDistrict]. Detailed information of our final model fitting can be found in the **Appendix**. The employment status variable is not important in our model, which might because that this variable is similar to other socio-economic variables included in our model, such as household income and eduction. It is a good practice that do not use correlated features in the model. 
+
+## Why are we using MRP
+
+Given random digit dialing (RDD) as an example, the response rates of RDD have declined to 9% in 2012 [@Forecasting]. Most people would agree that obtaining survey data from online community such as the generation of the Xbox data would be cheaper and faster compared with traditional methods such as RDD [@Forecasting].
+
+Through post-stratification method, the final population-level estimates are actually estimated at cell-level. One could simply use the average of the response variable within each cell to obtain the cell-level  estimates. However, taking average is an unbiased estimation only if the samples are randomly drawn from the population, which requires the partition of cell is fine and might result in sparsity in cells [@Forecasting]. Fortunately, the multilevel regression model can provide accurate and robust cell-level estimates, while avoiding those issues caused by taking empirical means.
+
+As the number of variables and levels in each variable increases, the total number of cell can become enormous. Thus, it is very important to take robustness the small sub-groups estimation into consideration. Fortunately, sparse cells can borrow information from other cells. The idea is that if some cell has very little information then it’s coefficients will be drawn from an average of those cells that are similar. One strength of the MRP is that state-specific estimates can be obtained by using a state-specific post-stratification dataset.
+
+## The sex and gender problem in modern survey
+
+The Nationscape survey data gathered the information of gender, while the 2018 ACS data gathered the information of sex. It is worthwhile mentioning that sex and gender are two different things, however, in this study, we had to match sex to gender in order to make prediction with census data using survey data trained model. 
+While the measurements and the definition of sex and gender is continuously changing nowadays, challenges in response categories differ between sex and gender measurement. It is important to first understand that sex, by definition, refers to a set of biological attributes in humans and animals, while gender, by definition, refers to the socially constructed roles, behaviors, expressions and identities of girls, women, boys, men, and gender diverse people [@kennedy2020using]. Another problem is that sex and gender are not binary nowadays, which makes it difficult in constructing features. Thus, the authors mentioned in their paper "Our challenge increases when we consider that we are not simply moving to a more diverse way of coding sex, but instead a recognition that the construct of gender, while the same as sex assigned at birth for many, is a different construct for others." [@kennedy2020using]. The similar issue also exists in other variables such as race vs. ethnicity. 
+
+## Weaknesses and next steps
+
+As we mentioned above, the sex and gender adjustment, classification and construct might introduce biases into the framework. Another source of systematic error might be that the survey data used for modeling was collected in June. It is possible that public opinion of Trump and Biden have affected by the events bound to the election. It can therefore be assumed that this error will sooner or later influence the final result of US 2020 Presidential Election. Future work might extend the MRP framework to time series analysis area, which would be helpful in discovering trend of support rate over time.
+
+Our final model partitioned the data into 32640 sub-cells and the census dataset to make the prediction has 466413 observations. On average, each sub-cell has about 15 samples. In terms of the number of sub-cells, the sample size about half a million might not be large enough. In our future work, a much larger census dataset could be used to make the prediction. 
+
+One potential limitation of the MRP model is that only categorical variables such as socio-economic, demographic, and geographic features are suitable to build sub-cells. In future work, a separated model can be developed to include variables mentioned in the Keys model [@theKeys]. An popular idea is that the accuracy of the prediction can be improved through stacking different models together, where each model is in charge of different aspects of information, such as different sets of un-correlated variables. All important "Keys" mentioned in the Keys model worth exploring in future study [@theKeys; @electionConcerns].
+
+\newpage
+
+# Appendix {-}
+
+```{r edafigures, fig.width = 4, fig.height= 3}
+# the model
+broom::tidy(lg_employment)
+# there are 50 states plus 1 distric
+survey_data$state %>% levels()
+# barplots 
+barplot(table(survey_data$gender  ) )
+barplot(table(survey_data$education ) )
+barplot(table(survey_data$employment ) )
+barplot(table(survey_data$race ) )
+barplot(table(survey_data$household_income  ) )
+barplot(table(survey_data$age ) )
+
+# doule check the distribution of data, categorical
+barplot(table(census_data$gender  ) )
+barplot(table(census_data$race ) )
+barplot(table(census_data$household_income  ) )
+barplot(table(census_data$employment  ) )
+barplot(table(census_data$age ) )
+barplot(table(census_data$education ) )
+
+```
+
+\newpage
+
+
+# References
+
+

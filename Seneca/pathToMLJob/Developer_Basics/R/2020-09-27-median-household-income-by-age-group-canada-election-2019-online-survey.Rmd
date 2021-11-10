@@ -1,0 +1,125 @@
+---
+title: 'Median Household Income by Age Group: Canada Election 2019 Online Survey'
+author: "Guannan Shen"
+date: '2020-09-27'
+slug: median-household-income-by-age-group-canada-election-2019-online-survey
+categories: []
+tags: []
+description: 'This is an example of R website using Blogdown'
+---
+
+```{r setup, include=FALSE, cache = FALSE}
+require("knitr")
+opts_chunk$set(tidy.opts=list(width.cutoff=60),tidy=TRUE)
+opts_chunk$set(engine = "R")
+knitr::opts_chunk$set(echo = T)
+knitr::opts_chunk$set(message = F)
+knitr::opts_chunk$set(warning = F)
+## setting wd in DELL
+# opts_knit$set(root.dir = "~/Documents/")
+                                                 
+## cache = F, if cache = T, will not revaluate code chunk everytime
+## double or more space to insert a line break
+```
+
+
+```{r libs, echo = FALSE, warning= F}
+######################
+## Set up workspace
+######################
+rm(list = ls())
+require(tidyverse)
+require(magrittr)
+require(cesR)
+
+options(stringsAsFactors = F)
+options(dplyr.width = Inf)
+# getwd()
+
+# ######## clean memory ######################
+# rm(list = ls())
+# gc()
+# is(dds)
+# slotNames(dds)
+```
+## Abstract 
+
+Nowadays, the income inequality is one of the most important issues for modern society. The impact of rising inequality is drawing concerns on crime rate, education, public health and economy growth. In this study, the Canadian Election 2019 Online Survey (CES2019) data was used to explore the distribution of median total household income in Canada across age groups. The result was furthered compared with the result of the United States (US) (https://www.statista.com/). As a result, we found that elder people in Canada could live better compared with ones in the US.
+
+## Introduction 
+People care more about the income inequality issue than anytime in the history. Thus, there is no doubt that this question has become one of the most important questions when it comes to election. Canada is known for its low income inequality. However, it has been well known that Canada is more unequal now than it was in 1980, and Canadians can expect it to get even worse in the future (https://irpp.org/research-studies/whats-so-bad-about-increasing-inequality-in-canada/). For many years, the inequality in household income has been trending up in many countries. As Canada and the US are close neighbors, the economic well-being of these two countries is often compared. Through this comparison, one could gain more solid knowledge on the inequality income issue in Canada. Has Canada really done a better job in reducing income inequality compared with the US? Moreover, the relative level of income inequality of Canada compared to the US is an important factor in the measurement of the Canada government performance.   
+
+### Dataset and Methods
+The dataset used in this work was obtained via R-package "cesR" (Hodgetts and Alexander 2020). Particularly, this dataset came from a large online survey (Stephenson et al., 2019), 2019 Canadian Election Study, which contains 37822 observations for 620 variables. The online sampling of this study was composed of a two-wave panel. The first stage is a modified rolling-cross section during the campaign period, and the second one is post-election recontact wave (Stephenson et al., 2019).  
+In this work, the age variable was generated based on the year of birth, which ranges from 18 to 99. The total household income was obtained directly from the dataset. All observations which have missing values in the income variable were removed from the further analysis. What's more, observations with extreme income (< 0.1%) were also removed. Thus, 25531 observations were used in this work eventually. To calculate median household income by age groups, the age was categorized into 7 groups as shown in the figure.  
+All work were done in R (version 4.0.2) (R Core Team 2020) and Rstudio (version 1.3.1093) (https://www.rstudio.com). Tidyverse (version 1.3.0) was used for data wrangling and visualization (Wickham et al., 2019). All code can be found in https://github.com/Chelsea-Cheng99/Chelsea-Cheng99.github.io.  
+
+```{r importdata, echo = FALSE, include=FALSE, eval= TRUE}
+# get data
+get_ces("ces2019_web")
+
+```
+
+
+```{r cleandata, echo = FALSE}
+# choose variables want to use
+df <- ces2019_web[, c("cps19_yob", "cps19_income_number")] %>% as.data.frame() %>% 
+   na.omit() %>% 
+# generate age from year of birth
+    mutate(age = 100 - cps19_yob) %>% dplyr::rename(Income = cps19_income_number) %>% dplyr::select(age, Income) %>% 
+# get rid of outliers in income 
+dplyr::filter(Income <= as.numeric(quantile(Income, probs = 0.999)[1])) %>%
+# make age categorical as 18-28, 28-38
+  mutate(Age_cate = cut(age, breaks = seq(18, 109, 10), right = FALSE )) %>% 
+   na.omit() %>% mutate(Age = fct_collapse(Age_cate, "[78, )" = c("[78,88)", "[88,98)", "[98,108)"))) %>% 
+# calculate median of household income by age group
+ group_by(Age) %>%
+    dplyr::summarize(MedianIn = median(Income, na.rm=TRUE))
+# Now we have age and total household income  
+# dim(df)
+# head(df)
+```
+
+
+## Results  
+
+```{r plot, echo = FALSE}
+fontSize <- 14
+p<-ggplot(data=df, aes(x=Age, y=MedianIn)) +
+  geom_bar(aes(fill=Age), stat="identity", color="black", width = 0.7) +
+  labs(y = "Median household income in Canadian dollars",
+       title = "Median household income in Canada in 2019") + 
+  scale_fill_brewer() +
+  # scale_fill_brewer(type = "div", palette = "RdBu") +
+  theme_bw() +
+  coord_cartesian(ylim=c(20000,90000)) + 
+geom_text(aes(Age, MedianIn + 3000, label = round(MedianIn,2) ), color = "black", size = 4) +
+theme(axis.text.x = element_text(size = fontSize -2, colour = "black"),
+      axis.text.y = element_text(size = fontSize - 2, colour = "black"),
+      axis.title.x = element_text(size = fontSize),
+      axis.title.y = element_text(size = fontSize),
+      legend.text = element_text(size= fontSize - 2),
+      legend.title = element_text(size= fontSize),
+      text=element_text(family="Arial"))
+  
+p
+
+```
+
+The age group was categorized into 18-28, 28-38, 38-48, 48-58, 58-68, 68-78 and 78 & over, where the right boundaries were not included. For each age group, the median of the total household income was calculated and shown above each bar.  
+
+## Discussion  
+The Median household income in Canada in 2019 by age groups was shown in the figure above. The median of household income was calculated for each age group. With the median, we obtained a more robust estimation of average house income compared with the simple mean, by excluding the impact of outliers. A classical bell-shaped pattern was observed, where the middle-age groups have higher median household income, while elder and younger age groups have lower income. The range of the median household income was from 50000 to 60000 CAD, where the lowest income was observed from the youngest group.  
+Compared with the median household income in the United States 2019 (https://www.statista.com/statistics/233184/median-household-income-in-the-united-states-by-age/), the US median household income ranges from 37335 to 92221 USD, where the bell shape is similar with Canada but the income gap is much greater than Canada. Especially, the lowest income was observed in the eldest age group, 75 years old and over. This finding is a little bit counter-intuitive. Since as people getting old, they are expected to have a well-designed retirement plan to protect them. In terms of the least wealthy group, Canada has done a better job, since the youngest group is more capable to take risks in life than the elder group.  
+Most studies find that Canadians are not only less rich, but also less unequal than their American neighbors (Wolff et al., 2012). These traditional opinions have been proved in this work. While the income inequality across age groups are obvious in both countries, the Canada government should be proud that they have provided the elderly in Canada much better protection than the US. 
+
+
+## References
+
+Paul A. Hodgetts and Rohan Alexander (2020). cesR: Access the CES Datasets a Little Easier.. R package version 0.1.0.  
+Stephenson, Laura B; Harell, Allison; Rubenson, Daniel; Loewen, Peter John, 2020, '2019 Canadian Election Study - Online Survey', https://doi.org/10.7910/DVN/DUS88V, Harvard Dataverse, V1  
+Stephenson, Laura, Allison Harrel, Daniel Rubenson and Peter Loewen. Forthcoming. 'Measuring Preferences and Behaviour in the 2019 Canadian Election Study,' Canadian Journal of Political Science.
+R Core Team. 2020. R: A Language and Environment for Statistical Computing. Vienna, Austria: R Foundation for Statistical Computing. https://www.R-project.org/.  
+Wickham et al., (2019). Welcome to the tidyverse. Journal of Open Source Software, 4(43), 1686, https://doi.org/10.21105/joss.01686  
+Edward N. Wolff, Ajit Zacharias, Thomas Masterson, and Selçuk Eren*, A Comparison of Inequality and Living Standards in Canada and the United States Using an Expanded Measure of Economic Well-Being, Levy Economics Institute of Bard College, 2012
+
